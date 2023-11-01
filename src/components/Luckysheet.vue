@@ -15,6 +15,8 @@
         <button type="button" @click="edit" >插入或修改</button>
 <!--        <button type="button" @click="getAllSheets">获取所有sheet</button>-->
         <button type="button" @click="deleteWorkbook">删除该工作簿</button>
+        上传：<input style="font-size:16px;" type="file" @change="uploadExcel" />
+        <button type="button" @click="exportExcel">导出</button>
       </div>
       <div id="luckysheet" style="height: 570px;width: 100%"></div>
     </div>
@@ -23,6 +25,8 @@
 </template>
 
 <script>
+import LuckyExcel from 'luckyexcel'
+import exportExcel from '@/utils/excelExport'
 import {saveOrEdit,getList,findDetail,deleteByGridKey} from '@/api/luckysheet'
 const proxyPre = 'luckysheet-service'
 const loadUrl = `/${proxyPre}/luckysheet/load`
@@ -70,8 +74,37 @@ export default {
       return options
     }
   },
-  methods:{
-    createSheet:function (dom){
+  methods: {
+    exportExcel: function () {
+      let name = ''
+      for(let v of this.listVo.records){
+        console.log(v)
+        if(v.gridKey === this.gridKey){
+          name = v.title
+          break
+        }
+      }
+      name = name.replaceAll('.xlsx','').replaceAll('.xls','')
+      let _that = this
+      exportExcel(this.sheet.getluckysheetfile(), name,'office', function (blob, name) {
+        _that.downloadFileByBlob(blob, name)
+      })
+    },
+    // blob转文件并下载
+    downloadFileByBlob:function (blob, fileName = "file") {
+      let blobUrl = window.URL.createObjectURL(blob)
+      let link = document.createElement('a')
+      link.download = fileName || 'defaultName'
+      link.style.display = 'none'
+      link.href = blobUrl
+      // 触发点击
+      document.body.appendChild(link)
+      link.click()
+      // 移除
+      document.body.removeChild(link)
+    },
+
+createSheet:function (dom){
       let options = {
         container:dom,
         ...this.luckysheet,
@@ -132,6 +165,37 @@ export default {
     reInitLuckysheet(){
       this.sheet.destroy()
       this.createSheet('luckysheet')
+    },
+    uploadExcel(evt){
+      const files = evt.target.files;
+      if(files==null || files.length==0){
+        alert("No files wait for import");
+        return;
+      }
+
+      let name = files[0].name;
+      let suffixArr = name.split("."), suffix = suffixArr[suffixArr.length-1];
+      if(suffix!="xlsx"){
+        alert("Currently only supports the import of xlsx files");
+        return;
+      }
+      let _that = this
+      LuckyExcel.transformExcelToLucky(files[0], function(exportJson){
+
+        if(exportJson.sheets==null || exportJson.sheets.length==0){
+          alert("Failed to read the content of the excel file, currently does not support xls files!");
+          return;
+        }
+        _that.sheet.destroy();
+
+        _that.sheet.create({
+          container: 'luckysheet', //luckysheet is the container id
+          showinfobar:false,
+          data:exportJson.sheets,
+          title:exportJson.info.name,
+          userInfo:exportJson.info.name.creator
+        });
+      });
     }
   },
   watch:{
